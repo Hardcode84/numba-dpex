@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from numba import types
-from numba.core.typing.templates import AttributeTemplate, infer_getattr
+from numba.core.typing.templates import AttributeTemplate, infer_getattr, bound_function, signature
+from numba.core.typing.arraydecl import ArrayAttribute, _expand_integer
 
 import numba_dpex
+from numba_dpex.core.types import DpnpNdArray
 
 
 @infer_getattr
@@ -43,3 +45,22 @@ class ListAttribute(AttributeTemplate):
 
     def resolve_ctypes(self, ary):
         return types.voidptr
+
+
+def generic_expand_cumulative(ary, args, kws):
+    if args:
+        raise NumbaAssertionError("args unsupported")
+    if kws:
+        raise NumbaAssertionError("kwargs unsupported")
+    assert isinstance(ary, types.Array)
+    return_type = DpnpNdArray(dtype=_expand_integer(ary.dtype),
+                          ndim=1, layout='C', usm_type=ary.usm_type, device=ary.device, queue=ary.queue, addrspace=ary.addrspace)
+    return signature(return_type, recvr=ary)
+
+@infer_getattr
+class DPNPArrayAttribute(ArrayAttribute):
+    key = DpnpNdArray
+
+    @bound_function("array.cumsum")
+    def resolve_cumsum(self, ary, args, kws):
+        return generic_expand_cumulative(ary, args, kws)
